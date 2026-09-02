@@ -230,8 +230,9 @@ component.**
 - The templates are `html`…`` tagged strings — no framework, no JSX runtime, no vDOM. A component is
   ~0.5–3 KB of source; the only shared runtime is `hono/html` (~1.5 KB gzipped). Minified + brotli'd,
   the whole current bundle is a few KB, and you have runway into the thousands of lines before size
-  is a real concern. Step one is always: `esbuild --minify`, serve it compressed with a hashed name +
-  long cache TTL, and look at the actual transfer size.
+  is a real concern. Step one is always: minify (`npm run build:prod` — `--minify`, ~12 KB → ~7.5 KB,
+  ~2.5 KB gzipped; see `development.md`), serve it compressed with a hashed name + long cache TTL, and
+  look at the actual transfer size.
 - One file is also an advantage here: one cache entry, one round trip, no fetch waterfall — a swap
   that composes several sub-components renders synchronously.
 - **If it does get big:** the split unit should be the **route**, not the component (per-component

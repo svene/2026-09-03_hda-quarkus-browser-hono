@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "esbuild src/main/java/dev/svenehrke/demo/inbound/web/hx-hono.ts --bundle --platform=browser --format=iife --outfile=src/main/resources/META-INF/resources/js/hono/hx-hono.js",
+    "build:prod": "npm run build -- --minify",
     "watch": "npx bun watch.ts"
   },
   "dependencies": {

@@ -94,7 +94,8 @@ currently this is WIP. More notes written down than real documentation
   htmx 4 extension (`hono`, in `hx-hono.ts`) intercepts each `/uiroute/*` response and swaps the
   produced HTML in.
 - Built with `npm run build`, which runs:\
-`esbuild src/main/java/dev/svenehrke/demo/inbound/web/hx-hono.ts --bundle --platform=browser --format=iife --outfile=src/main/resources/META-INF/resources/js/hono/hx-hono.js`
+`esbuild src/main/java/dev/svenehrke/demo/inbound/web/hx-hono.ts --bundle --platform=browser --format=iife --outfile=src/main/resources/META-INF/resources/js/hono/hx-hono.js`\
+  (`npm run build:prod` adds `--minify` for release jars — see "Dev vs. production build" below).
 - `hx-hono.ts` is the esbuild entry — it imports `render` and registers the extension:
 ````ts
 import { render } from "./render";
@@ -150,6 +151,39 @@ export function render(route: string, vm: unknown): string {
 - Adding a new route means: add the `JTSPersonRouteName` enum value, add its `case` in
   `PersonUIResource.uiroute()`'s Java `switch` (returning `new UiResponse(route.name(), vm)`), and
   add its entry to `personRoutes` in `routes.ts`.
+
+#### Dev vs. production build (minification)
+
+Two `package.json` scripts, one shared esbuild invocation:
+
+| script | output | use |
+|---|---|---|
+| `npm run build` | readable, ~12 KB | dev; run by `npm run watch` and by the Playwright `webServer` |
+| `npm run build:prod` | `--minify`, ~7.5 KB (~2.5 KB gzipped) | release jars — run it **before `mvn package`** |
+
+`build:prod` is literally `npm run build -- --minify`, so the entry point / output path live in one
+place. `mvn package` just copies whatever `hx-hono.js` is currently on disk into
+`target/classes/META-INF/resources/` — nothing in the Maven build regenerates it, so a release flow
+is:
+
+```
+npm run build:prod && mvn package -DskipTests
+java -jar target/quarkus-app/quarkus-run.jar
+```
+
+Notes:
+
+- esbuild `--minify` does whitespace removal + identifier renaming + syntax compression. It does
+  **not** rename object-literal keys or string literals, so the name-sensitive parts survive:
+  `registerExtension("hono", …)` and the hook keys `htmx_config_request` / `htmx_after_request`
+  (htmx looks those up by name).
+- No source map is emitted. Add `--sourcemap=external` to `build:prod` if you want one (it writes a
+  git-ignored `hx-hono.js.map` alongside).
+- Minification and HTTP compression are complementary. To let Quarkus gzip/brotli-compress the
+  served bundle, set `quarkus.http.enable-compression=true` (optionally
+  `quarkus.http.compress-media-types=application/javascript,text/javascript,...`).
+- Wiring `build:prod` into `mvn package` (via `frontend-maven-plugin` or `exec-maven-plugin`) is a
+  possible follow-up — deliberately not done, to keep the frontend build a plain `npm` concern.
 
 #### `.tsx` -> `.ts` (done)
 
