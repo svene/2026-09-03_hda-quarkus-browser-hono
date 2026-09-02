@@ -1,7 +1,6 @@
 package dev.svenehrke.demo.inbound.web;
 
 import dev.svenehrke.demo.core.PeopleService;
-import dev.svenehrke.demo.inbound.web.infra.js.JsxRenderer;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
@@ -13,16 +12,17 @@ import jakarta.ws.rs.core.MediaType;
 
 /**
  * Component URLs — a separate concept from the REST-ish mutation endpoints in
- * {@link PersonActionResource}. Every GET route that renders an HTML fragment is
- * keyed by {@link JTSPersonRouteName}; most are dispatched through the generic
+ * {@link PersonActionResource}. Every GET route is keyed by
+ * {@link JTSPersonRouteName}; most are dispatched through the generic
  * "/uiroute/{name}" endpoint, while routes needing parameters beyond
  * {@code id} get their own dedicated {@code @Path} method (e.g. {@link #personTable}).
+ *
+ * <p>The response body is a JSON {@link UiResponse} envelope — the browser-side
+ * {@code hono} htmx extension runs the matching hono template on {@code vm} to
+ * produce the HTML fragment. No HTML is rendered on the server.
  */
 @Path("/uiroute")
 public class PersonUIResource {
-
-	@Inject
-	JsxRenderer renderer;
 
 	@Inject
 	PeopleService peopleService;
@@ -35,8 +35,8 @@ public class PersonUIResource {
 	 */
 	@GET
 	@Path("/{name}") // Java-HONO
-	@Produces(MediaType.TEXT_HTML)
-	public String uiroute(@PathParam("name") String name, @QueryParam("id") Integer id) {
+	@Produces(MediaType.APPLICATION_JSON)
+	public UiResponse uiroute(@PathParam("name") String name, @QueryParam("id") Integer id) {
 		JTSPersonRouteName route;
 		try {
 			route = JTSPersonRouteName.valueOf(name);
@@ -50,13 +50,13 @@ public class PersonUIResource {
 			case PersonEditor -> peopleService.personEditModel(id);
 			default -> throw new IllegalStateException(route + " is served by its own dedicated endpoint, not " + getClass().getSimpleName() + "#uiroute");
 		};
-		return renderer.render(route, vm);
+		return new UiResponse(route.name(), vm);
 	}
 
 	@GET
 	@Path("/PersonTable") // Java-HONO
-	@Produces(MediaType.TEXT_HTML)
-	public String personTable(@QueryParam("search") String search) {
-		return renderer.render(JTSPersonRouteName.PersonTable, peopleService.peopleForSearch(search));
+	@Produces(MediaType.APPLICATION_JSON)
+	public UiResponse personTable(@QueryParam("search") String search) {
+		return new UiResponse(JTSPersonRouteName.PersonTable.name(), peopleService.peopleForSearch(search));
 	}
 }

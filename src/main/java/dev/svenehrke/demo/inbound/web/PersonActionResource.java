@@ -41,7 +41,7 @@ public class PersonActionResource {
 		peopleService.deleteByIds(selection);
 		return Response
 			.ok()
-			.header(HTMXConsts.HX_REDIRECT, "/uiroute/" + JTSPersonRouteName.Page.name())
+			.header(HTMXConsts.HX_REDIRECT, "/")
 			.build();
 	}
 
