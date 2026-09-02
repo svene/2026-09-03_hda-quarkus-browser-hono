@@ -1,11 +1,10 @@
 import {html} from "hono/html";
 import {PersonPageModel} from "./generated/types/vm-types";
-import {Layout} from "./layout";
 import {personRoutes} from "./routes";
 import {PersonTable} from "./persontable";
 import {HtmlResult} from "./route-types";
 
-export const Page = (vm: PersonPageModel): HtmlResult => Layout(html`
+export const Page = (vm: PersonPageModel): HtmlResult => html`
 	<div class="container mt-1">
 
 		<div class="p-1 mt-1 area-border" style="min-height: 500px">
@@ -27,4 +26,4 @@ export const Page = (vm: PersonPageModel): HtmlResult => Layout(html`
 		</div>
 
 	</div>
-`);
+`;

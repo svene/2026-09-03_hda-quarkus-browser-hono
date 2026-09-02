@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main/java/dev/svenehrke/demo/inbound/web/render.ts --bundle --platform=neutral --format=cjs --outfile=target/classes/graaljs/ssr.js",
+    "build": "esbuild src/main/java/dev/svenehrke/demo/inbound/web/hx-hono.ts --bundle --platform=browser --format=iife --outfile=src/main/resources/META-INF/resources/js/hono/hx-hono.js",
     "watch": "npx bun watch.ts"
   },
   "dependencies": {
