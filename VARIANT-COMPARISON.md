@@ -1,24 +1,20 @@
-# Quarkus vs Spring Boot twin — remaining differences
+# Variant note
 
-- **Q** = `2026-03-15_hda-quarkus-graalvm-jsx-demo` (this repo)
-- **SB** = `2026-03-09_hda-springboot-graalvm-jsx-demo`
+This repo is the **browser-rendering** fork of
+[`2026-03-15_hda-quarkus-graalvm-jsx-demo`](../2026-03-15_hda-quarkus-graalvm-jsx-demo).
 
-The two projects demonstrate the same hono/html + GraalVM SSR pattern on two stacks. Their web
-layers have been converged.
+Same app, same hono/html templates, same htmx/hyperscript choreography, same Java→TS codegen, same
+persistence. The only difference is *where the templates run*:
 
-## Still to sync
+| | GraalVM demo (upstream) | this repo |
+|---|---|---|
+| `/uiroute/*` response | `text/html` fragment | `{ "route", "vm" }` JSON envelope |
+| Template execution | server-side, GraalVM `Context` pool | browser, via the `hono` htmx extension (`hx-hono.js`) |
+| First paint | `GET /` → 303 → `/uiroute/Page` (SSR) | static `index.html` shell, `#app` self-bootstraps with `hx-trigger="load"` |
+| Runtime | GraalVM JDK (for JS JIT) | plain JDK 21 |
+| Deps | `org.graalvm.polyglot:{polyglot,js}` | none — rendering moved to the browser |
 
-Nothing. Each repo has a current `architecture.md` (they share structure; the prose is per-stack).
+See `architecture.md` for the full "after" picture.
 
-## Deliberate — do not align
-
-It's Quarkus vs Spring Boot, so everything framework-idiomatic differs on purpose:
-
-- JAX-RS (`@Path`, `NotFoundException`, `@ConfigMapping`) vs Spring MVC (`@GetMapping`,
-  `ResponseStatusException`, `@ConfigurationProperties`).
-- Bundle watcher: Quarkus `@Scheduled(every = "1s")` vs Spring `@Scheduled(fixedDelay = 500)` +
-  `spring-boot-devtools` restart-exclude wiring.
-- Coordinates: `dev.svenehrke` vs `org.svenehrke`, different `artifactId`, different base package.
-- In-memory DB: H2 (Q) vs HSQLDB (SB).
-- Packaging: SB's hand-written `Dockerfile` / `docker-compose` vs Quarkus's generated
-  `src/main/docker/*`.
+*(The three-way comparison with the Spring Boot SSR twin lives in the upstream repo's
+`VARIANT-COMPARISON.md`.)*

@@ -8,9 +8,11 @@ currently this is WIP. More notes written down than real documentation
 
 - View-model types (`PersonPageModel`, `PersonTableModel`, `PersonDetailModel`, ...) are hand-written
   Java records under `src/main/java/dev/svenehrke/demo/inbound/web/`, and are the single source of truth.
-  - Controllers create these Java records, serialize them to JSON and pass them via GraalVM to JS.\
-    Passing VMs via JSON is much more efficient and easier compared to passing Java-Objects: it is easy
-    to do so in Java, deserializing them in JS is easy as well and much more efficient.
+  - `PersonUIResource` creates these Java records and returns them wrapped in a
+    `UiResponse(String route, Object vm)` envelope; JAX-RS + jsonb serialize that to
+    `application/json`. The browser `JSON.parse`s the envelope and runs the matching hono template on
+    `vm` (see "Browser bundle" below). The rendering used to happen server-side inside a GraalVM
+    `Context`; only the transport changed — the VM shapes the templates consume are identical.
 - The `cz.habarta.typescript-generator` Maven plugin (bound to the `process-classes` phase in `pom.xml`)
   scans for classes matching `dev.svenehrke.demo.inbound.**.*Model` and `dev.svenehrke.demo.inbound.**.*VM`
   and generates matching TypeScript interfaces into\
@@ -24,9 +26,9 @@ currently this is WIP. More notes written down than real documentation
   - `JTSPersonRouteName` — every component/uiroute name (see "Component URLs (uiroute)" below):
     `export type JTSPersonRouteName = "Page" | "PersonDetails" | ...`. Single source of truth for the
     route-name strings that connect `PersonUIResource.java`
-    (`renderer.render(JTSPersonRouteName.PersonDetails, vm)`) to `routes.ts`'s `personRoutes` map — a
-    typo or a route removed on the Java side is a TypeScript error instead of a runtime "ROUTE NOT
-    FOUND" fallback.
+    (`new UiResponse(JTSPersonRouteName.PersonDetails.name(), vm)`) to `routes.ts`'s `personRoutes`
+    map — a typo or a route removed on the Java side is a TypeScript error instead of a runtime
+    "ROUTE NOT FOUND" fallback.
   - `JTSPersonEventName` — every htmx/hyperscript event name used to coordinate the UI
     (`export type JTSPersonEventName = "PERSON_UPDATED" | "PersonDetailsRow_CloseCmd"`). `.ts`
     components never write an event name as a bare string — they call `jtsperson.ts`'s
@@ -57,8 +59,9 @@ currently this is WIP. More notes written down than real documentation
   own dedicated `@Path` method instead. `PersonTable` is the current example: it needs `search`, not `id`,
   so it has its own `PersonUIResource.personTable()` at `@Path("/PersonTable")`. JAX-RS matches the literal
   `/uiroute/PersonTable` path before falling back to the `/uiroute/{name}` template, so the two coexist
-  without ambiguity. Both still call `renderer.render(JTSPersonRouteName.xxx, vm)`, so nothing on the
-  frontend (`routes.ts`) needs to change when a route moves from the generic dispatcher to its own method.
+  without ambiguity. Both still return `new UiResponse(JTSPersonRouteName.xxx.name(), vm)`, so nothing
+  on the frontend (`routes.ts`) needs to change when a route moves from the generic dispatcher to its
+  own method.
   - `uiroute()`'s switch only lists the routes it actually serves, falling back to `default -> throw new
     IllegalStateException(...)` for anything else. This means moving a route out to its own endpoint is
     just deleting its case — no dead branch has to be added or maintained for it. The tradeoff: the
@@ -67,52 +70,74 @@ currently this is WIP. More notes written down than real documentation
     request time (`IllegalStateException`), not at build time — the same runtime-checked risk this file
     already documents for `render.ts`'s route lookup and for an unknown `name` in the URL.
 - These are deliberately treated as a separate concept from REST resources — they're URLs for fetching a
-  rendered UI component, not for a domain resource. `routes.ts`'s `personRoutes` map builds them
+  view model for a UI component, not for a domain resource. `routes.ts`'s `personRoutes` map builds them
   (`personRoutes.PersonDetails.url(id)`, `personRoutes.PersonEditor.url(id)`, `personRoutes.PersonTable.url()`,
   ...) from `JTSPersonRouteName` values, and pairs each URL with the render function for that route —
-  see "Generate JS for GraalVM (hono/html templates)" below.
+  see "Browser bundle (hono/html templates + the `hono` htmx extension)" below.
 - Mutations (`PUT /person/{id}` to save an edit, `DELETE /delete` for bulk delete) stay on their own
   REST-ish paths in a separate class, `PersonActionResource.java` — they don't go through `/uiroute`.
   `routes.ts`'s `personActionUrls.UpdatePerson.url(id)` builds the `PUT` URL from
   `HonoWebApiConsts.PERSON`; `personActionUrls.Delete.url()` builds the `DELETE` URL from
   `HonoWebApiConsts.DELETE` (both from generated `web-api-consts.ts` — see above).
-- `RootResource` (`GET /`) redirects to `/uiroute/Page`.
+- `GET /` serves the static shell `src/main/resources/META-INF/resources/index.html` (Quarkus/Vert.x
+  welcome file — there is no `RootResource`). Its `#app` div does
+  `hx-get="/uiroute/Page" hx-trigger="load"` to bootstrap the first render.
 
-### Generate JS for GraalVM (hono/html templates)
+### Browser bundle (hono/html templates + the `hono` htmx extension)
 
 - The `.ts` components render HTML with hono's `html` tagged-template function
   (`import {html} from "hono/html"`), not with JSX. Each component is a plain function
   `(vm: SomeModel): HtmlResult => html`...`` where `HtmlResult = ReturnType<typeof html>`
   (see `route-types.ts`). These files used to be `.tsx` (JSX) — since the conversion they contain
   no JSX and are plain `.ts`; `tsconfig.json` no longer sets `jsx` / `jsxImportSource`.
-- started by invoking `npm run build`...
-- ... which runs:\
-`esbuild src/main/java/dev/svenehrke/demo/inbound/web/render.ts --bundle --platform=neutral --format=cjs --outfile=target/classes/graaljs/ssr.js`
-- This means a single JS file (`ssr.js`) is generated from the `.ts` files to be used from Java via GraalVM.
-- `render.ts` exports a single `render(route, vmJson)` entry function, but it doesn't dispatch itself —
-  it looks `route` up in `routes.ts`'s `personRoutes` map and calls that entry's `render(vm)`:
-````JS
+- Rendering runs **in the browser**. `PersonUIResource` returns `{ route, vm }` as JSON; a small
+  htmx 4 extension (`hono`, in `hx-hono.ts`) intercepts each `/uiroute/*` response and swaps the
+  produced HTML in.
+- Built with `npm run build`, which runs:\
+`esbuild src/main/java/dev/svenehrke/demo/inbound/web/hx-hono.ts --bundle --platform=browser --format=iife --outfile=src/main/resources/META-INF/resources/js/hono/hx-hono.js`
+- `hx-hono.ts` is the esbuild entry — it imports `render` and registers the extension:
+````ts
+import { render } from "./render";
+declare const htmx: any;
+
+htmx.registerExtension("hono", {
+  // htmx 4 hard-codes `Accept: text/html`; /uiroute/* only produces JSON, so ask for it.
+  htmx_config_request: (_elt, detail) => {
+    detail.ctx.request.headers["Accept"] = "application/json, text/html;q=0.9";
+  },
+  // htmx 4's transformResponse equivalent: rewrite the body before the swap.
+  htmx_after_request: (_elt, detail) => {
+    const ctx = detail.ctx;
+    const ct = ctx.response?.headers?.get?.("content-type") ?? "";
+    if (!ct.includes("application/json")) return;   // mutations, errors → leave alone
+    if (!ctx.text) return;
+    const { route, vm } = JSON.parse(ctx.text);
+    ctx.text = render(route, vm);
+  },
+});
+````
+- `render.ts` no longer talks to any JS engine. It takes the already-parsed `vm` object and returns
+  a `string`; it doesn't dispatch itself — it looks `route` up in `routes.ts`'s `personRoutes` map:
+````ts
 import {html} from 'hono/html';
 import {personRoutes} from "./routes";
 import {RouteDefinition} from "./route-types";
 
-export function render(route: string, vmJson: string): string {
-  const routeDefinitions: Record<string, RouteDefinition> = personRoutes;
-  const routeDefinition = routeDefinitions[route];
-  if (routeDefinition) {
-    const vm = JSON.parse(vmJson);
-    return String(routeDefinition.render(vm));
-  } else {
-    return String(html`<div>ROUTE '${route}' NOT FOUND</div>`);
-  }
+export function render(route: string, vm: unknown): string {
+  const defs = personRoutes as Record<string, RouteDefinition>;
+  const def = defs[route];
+  return String(def ? def.render(vm) : html`<div>ROUTE '${route}' NOT FOUND</div>`);
 }
 ````
 - **Why the `String(...)` at the boundary matters:** the per-route `render` functions return
-  `HtmlResult` (a boxed `HtmlEscapedString`, possibly a `Promise`), but `JsxRenderer.java` calls
-  `result.asString()` on whatever this function returns, which only works on a primitive JS string.
-  `render.ts`'s header comment has the full explanation (boxed-String unboxing, the union collapse,
-  hono's stringify phase). Rule of thumb: `HtmlResult` everywhere inside the components, stringify
-  exactly once in `render.ts`.
+  `HtmlResult` (a boxed `HtmlEscapedString`, possibly a `Promise`); `String(...)` collapses that to
+  the primitive `string` the extension assigns to `ctx.text`, and runs hono's stringify phase.
+  `render.ts`'s header comment has the full explanation. Rule of thumb: `HtmlResult` everywhere
+  inside the components, stringify exactly once in `render.ts`.
+- htmx 4 extension notes: `htmx.registerExtension()` (not `defineExtension`), underscored hook names
+  (`htmx_after_request` = the `htmx:after:request` event), extensions are **global** (every hook runs
+  for every request regardless of `hx-ext`), and `hx-hono.js` must load *after* `htmx.js` and not be
+  deferred (it calls `registerExtension` at parse time).
 - `routes.ts`'s `personRoutes` is typed as `satisfies Record<JTSPersonRouteName, RouteDefinition>` — every
   value of the generated `JTSPersonRouteName` union must have a `{url, render}` entry, or the file fails
   to typecheck. This is what actually guarantees every route has both a URL builder and a render
@@ -123,7 +148,8 @@ export function render(route: string, vmJson: string): string {
   `JTSPersonRouteName.valueOf(name)` validation (which already 404s on an unknown name before `render()`
   is ever called).
 - Adding a new route means: add the `JTSPersonRouteName` enum value, add its `case` in
-  `PersonUIResource.uiroute()`'s Java `switch`, and add its entry to `personRoutes` in `routes.ts`.
+  `PersonUIResource.uiroute()`'s Java `switch` (returning `new UiResponse(route.name(), vm)`), and
+  add its entry to `personRoutes` in `routes.ts`.
 
 #### `.tsx` -> `.ts` (done)
 
@@ -134,12 +160,14 @@ filters `.endsWith(".ts")`, so it also rebuilds on plain `.ts` edits like `route
 ignored before), and `tsconfig.json` (dropped the now-dead `jsx` / `jsxImportSource` options).
 
 ### Live reload for the browser
-During development the browser should automatically refresh when one of the .ts files is changed.
+During development the browser should automatically refresh when one of the `.ts` files is changed.
 
-This is achieved by using a SSE connection (see `DevReloadSSE.java`) which will
-be triggerd by `JsBundleWatcher` whenever the `ssr.js` changed.
+This is achieved by using an SSE connection (see `DevReloadSSE.java`, `inbound/web/infra/`) which is
+triggered by `JsBundleWatcher` whenever the emitted `hx-hono.js` bundle changes (it polls
+`src/main/resources/META-INF/resources/js/hono/hx-hono.js`'s `lastModified` once a second). There is
+no server-side JS engine to re-initialise anymore — a changed bundle just broadcasts a reload.
 
-`layout.ts` with `dev.js` then listens to these SSE events:
+`index.html` loads `dev.js`, which listens to those SSE events:
 ````js
 new EventSource("/dev-reload")
   .addEventListener("reload", () => {
@@ -149,17 +177,23 @@ new EventSource("/dev-reload")
   );
 ````
 
+Browsers HTTP-cache `hx-hono.js` aggressively — the SSE reload picks up the rebuilt bundle, but a
+manual refresh may need a hard reload (Ctrl+Shift+R).
+
 ### End-to-end tests
 
 - `playwright/` is a separate npm project (own `package.json`/`node_modules`, not the frontend one at
   the repo root) containing a Playwright test suite (`playwright/tests/main.spec.ts`).
 - Run it with `npm test` from inside `playwright/` (or `npx playwright test`).
-- `playwright.config.ts`'s `webServer` builds the JS bundle, packages the app with the GraalVM JDK
-  (`~/.sdkman/candidates/java/25.0.2-graal`), and starts a fresh instance on port 8080 before every run —
-  the in-memory H2 database is always re-seeded from scratch (`DBInitializer`, `Faker` with seed `0`), so
-  the tests can rely on deterministic data (e.g. the first seeded person is always "Jackie Rau").
-- The tests exercise the actual app routes: `/uiroute/{name}` component URLs (`/uiroute/Page`,
-  `/uiroute/PersonDetails?id=..`, ...) plus the separate `PUT /person/{id}` and `DELETE /delete`
-  mutation endpoints.
+- `playwright.config.ts`'s `webServer` builds the browser bundle (`npm run build`), packages the app
+  on the default JDK (plain `mvn package -q -DskipTests` — no GraalVM), and starts a fresh instance on
+  port 8080 before every run (`java -jar target/quarkus-app/quarkus-run.jar`) — the in-memory H2
+  database is always re-seeded from scratch (`DBInitializer`, `Faker` with seed `0`), so the tests can
+  rely on deterministic data (e.g. the first seeded person is always "Jackie Rau").
+- The tests load the static shell at `/` (a `gotoApp(page)` helper waits for the load-triggered
+  `#result-table table` render) and then exercise the actual app routes: `/uiroute/{name}` component
+  URLs (`/uiroute/Page`, `/uiroute/PersonDetails?id=..`, ...) — which now return the `{ route, vm }`
+  JSON envelope, rendered client-side — plus the separate `PUT /person/{id}` and `DELETE /delete`
+  mutation endpoints (`DELETE` redirects to `/`).
 
 
