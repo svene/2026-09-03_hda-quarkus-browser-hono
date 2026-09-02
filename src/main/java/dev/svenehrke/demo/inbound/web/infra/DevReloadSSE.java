@@ -1,4 +1,4 @@
-package dev.svenehrke.demo.inbound.web.infra.js;
+package dev.svenehrke.demo.inbound.web.infra;
 
 import io.quarkus.arc.profile.IfBuildProfile;
 import io.quarkus.vertx.web.Route;
