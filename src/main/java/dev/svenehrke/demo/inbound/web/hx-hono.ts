@@ -16,6 +16,13 @@ declare const htmx: any;
  * are left untouched.
  */
 htmx.registerExtension("hono", {
+	// htmx 4 hard-codes `Accept: text/html`; the `/uiroute/*` endpoints only
+	// produce the JSON envelope, so ask for JSON (HTML kept as a fallback so
+	// error pages and the HX-Redirect target still negotiate normally).
+	htmx_config_request: (_elt: Element, detail: any) => {
+		detail.ctx.request.headers["Accept"] = "application/json, text/html;q=0.9";
+	},
+
 	htmx_after_request: (_elt: Element, detail: any) => {
 		const ctx = detail.ctx;
 		const contentType = ctx.response?.headers?.get?.("content-type") ?? "";

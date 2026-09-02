@@ -32,9 +32,10 @@ export default defineConfig({
   /* Build and start a fresh Quarkus instance before every test run so the
      in-memory H2 database is always re-seeded from scratch.
      reuseExistingServer: false kills any running instance first.
-     GraalVM is required for the JS/JSX polyglot engine. */
+     `npm run build` emits the browser bundle (js/hono/hx-hono.js) that renders
+     the hono templates client-side — plain JDK 21+, no GraalVM. */
   webServer: {
-    command: `cd .. && npm run build && JAVA_HOME=${process.env.HOME}/.sdkman/candidates/java/25.0.2-graal mvn package -q -DskipTests && ${process.env.HOME}/.sdkman/candidates/java/25.0.2-graal/bin/java -jar target/quarkus-app/quarkus-run.jar`,
+    command: `cd .. && npm run build && mvn package -q -DskipTests && java -jar target/quarkus-app/quarkus-run.jar`,
     url: 'http://localhost:8080',
     reuseExistingServer: false,
     timeout: 120_000,

@@ -1,7 +1,16 @@
-import {test, expect} from '@playwright/test';
+import {test, expect, Page} from '@playwright/test';
 
 const BASE_URL = 'http://localhost:8080';
-const PAGE_URL = BASE_URL + '/uiroute/Page';
+// The app is a static shell served at '/'; its #app div does
+// hx-get="/uiroute/Page" hx-trigger="load", and the `hono` htmx extension
+// renders the fragment client-side from the JSON envelope.
+const PAGE_URL = BASE_URL + '/';
+
+// Navigate to the shell and wait for the load-triggered table render to land.
+async function gotoApp(page: Page) {
+  await page.goto(PAGE_URL);
+  await expect(page.locator('#result-table table')).toBeVisible();
+}
 
 // Seed data (Faker with seed 0): first person is Jackie Rau, Waelchi Orchard
 const FIRST_PERSON = { firstName: 'Jackie', lastName: 'Rau', street: 'Waelchi Orchard' };
@@ -15,30 +24,30 @@ const isEditUrl        = (url: string) => /\/uiroute\/PersonEditor(\?|$)/.test(u
 const isRowUrl         = (url: string) => /\/uiroute\/PersonRow(\?|$)/.test(url);
 
 test('has title', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
   await expect(page).toHaveTitle(/People Admin Application/);
 });
 
 test('has search', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
   await expect(page.getByTestId('search-field').locator('label')).toHaveText('Search');
 });
 
 test('has table', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
   await expect(page.locator('table thead tr button span').nth(1)).toHaveText('Delete');
   await expect(page.locator('table th')).toHaveText(['', 'Firstname', 'Lastname', 'Street', '']);
   await expect(page.locator('table tbody tr').nth(0).locator('td')).toHaveText([' ', 'Jackie', 'Rau', 'Waelchi Orchard', 'arrow_drop_down']);
 });
 
 test('shows row count below table', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
   const countText = await page.locator('#result-table > div').textContent();
   expect(countText).toMatch(/\d+ of total \d+/);
 });
 
 test('search filters the table', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
 
   const initialRowCount = await page.locator('table tbody tr').count();
 
@@ -60,7 +69,7 @@ test('search filters the table', async ({ page }) => {
 });
 
 test('clearing search restores full list', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
 
   const initialRowCount = await page.locator('table tbody tr').count();
 
@@ -79,7 +88,7 @@ test('clearing search restores full list', async ({ page }) => {
 });
 
 test('clicking a row expands the details card', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
 
   const firstRow = page.locator('table tbody tr').first();
   await expect(firstRow.locator('td').last()).toContainText('arrow_drop_down');
@@ -101,7 +110,7 @@ test('clicking a row expands the details card', async ({ page }) => {
 });
 
 test('clicking the expanded row header collapses the details card', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
 
   // Expand
   await Promise.all([
@@ -122,7 +131,7 @@ test('clicking the expanded row header collapses the details card', async ({ pag
 });
 
 test('clicking the details card opens the edit form', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
 
   await Promise.all([
     page.waitForResponse(resp => isDetailsUrl(resp.url())),
@@ -143,7 +152,7 @@ test('clicking the details card opens the edit form', async ({ page }) => {
 });
 
 test('edit form pre-fills current values', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
 
   // Read the displayed values from the table instead of hardcoding seed data
   const firstRow = page.locator('table tbody tr').first();
@@ -168,7 +177,7 @@ test('edit form pre-fills current values', async ({ page }) => {
 });
 
 test('Back button in edit form returns to details card', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
 
   await Promise.all([
     page.waitForResponse(resp => isDetailsUrl(resp.url())),
@@ -191,7 +200,7 @@ test('Back button in edit form returns to details card', async ({ page }) => {
 });
 
 test('saving an edit updates the row in the table', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
 
   await Promise.all([
     page.waitForResponse(resp => isDetailsUrl(resp.url())),
@@ -242,7 +251,7 @@ test('saving an edit updates the row in the table', async ({ page }) => {
 // Note: this test is destructive — it permanently deletes rows from the DB.
 // Run it last or against a fresh DB instance.
 test('bulk delete removes multiple selected rows', async ({ page }) => {
-  await page.goto(PAGE_URL);
+  await gotoApp(page);
 
   // Capture the names of the two rows to be deleted
   const [row0, row1] = await Promise.all(
@@ -256,13 +265,15 @@ test('bulk delete removes multiple selected rows', async ({ page }) => {
   await page.locator('table tbody tr').nth(0).locator('input[type="checkbox"]').check();
   await page.locator('table tbody tr').nth(1).locator('input[type="checkbox"]').check();
 
-  // Click Delete — backend responds with HX-Redirect to PAGE_URL.
-  // waitForURL would resolve immediately (already at PAGE_URL), so use waitForNavigation instead.
+  // Click Delete — backend responds with HX-Redirect to '/' (the shell).
+  // waitForURL would resolve immediately (already at '/'), so use waitForNavigation instead.
+  // After the reload the shell re-fetches /uiroute/Page and the `hono` extension re-renders.
   await Promise.all([
+    page.waitForResponse(resp => resp.url().includes('/uiroute/Page')),
     page.waitForNavigation(),
     page.locator('table thead button', { hasText: 'Delete' }).click(),
   ]);
-  await page.waitForSelector('table tbody tr');
+  await expect(page.locator('#result-table table tbody tr').first()).toBeVisible();
 
   // The table (with fresh data filled in) must not contain either deleted person
   const tableText = await page.locator('table tbody').textContent();
