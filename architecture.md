@@ -7,7 +7,7 @@ no virtual DOM. The twist in this variant: the HTML fragments are **rendered in 
 on the server.
 
 - **Quarkus 3.32.4** (plain **JDK 21**) — JAX-RS resources (`quarkus-rest` + `quarkus-rest-jsonb`),
-  CDI (`quarkus-arc`), JDBC persistence. No GraalVM, no polyglot, no native image.
+  CDI (`quarkus-arc`), JDBC persistence.
 - **hono/html** — TypeScript components written with hono's `html` tagged-template function, bundled
   by esbuild into a single browser script `hx-hono.js`.
 - **htmx 4 + hyperscript** — browser-side partial updates, plus a small custom htmx extension
@@ -20,11 +20,6 @@ hands the resulting HTML string back to htmx for the normal swap.
 
 The templates are plain functions — `(vm: SomeModel): HtmlResult => html`…`` — not JSX. `String(...)`
 on the result yields the HTML. There is no `hono/jsx`, no `renderToString`, no virtual DOM anywhere.
-
-*(This repo is the browser-rendering fork of `2026-03-15_hda-quarkus-graalvm-jsx-demo`, which runs
-the same templates server-side inside a GraalVM `Context` pool. Everything below the transport
-boundary — the codegen, the view models, the htmx/hyperscript choreography, persistence — is
-unchanged between the two.)*
 
 ---
 
@@ -165,10 +160,10 @@ everywhere inside the components; stringify exactly once here (see `render.ts`'s
 ## First paint — the static shell
 
 `GET /` serves a hand-written `src/main/resources/META-INF/resources/index.html` (Quarkus/Vert.x
-serves it as the welcome file — there is no `RootResource`). It carries what the old server-side
-`layout.ts` used to emit: `<html x-data="$store.darkMode">`, the `<head>` (bulma, htmx 4,
-hyperscript, `main.js`, `dev.js`, alpine, Material Icons) plus `<script src="/js/hono/hx-hono.js">`
-right after `htmx.js`, and the hero `<section>` with the dark-mode toggle. Its `#app` div does:
+serves it as the welcome file — there is no `RootResource`). It carries: `<html x-data="$store.darkMode">`,
+the `<head>` (bulma, htmx 4, hyperscript, `main.js`, `dev.js`, alpine, Material Icons) plus
+`<script src="/js/hono/hx-hono.js">` right after `htmx.js`, and the hero `<section>` with the
+dark-mode toggle. Its `#app` div does:
 
 ```html
 <div id="app" hx-get="/uiroute/Page" hx-trigger="load"
@@ -212,8 +207,6 @@ runtime global (htmx.js loads first); the extension references it via `declare c
 | `jtsperson.ts` | `eventName(name: JTSPersonEventName)` identity guard — every event-name string goes through it |
 | `generated/types/vm-types.d.ts` | generated — VM interfaces + `JTSPersonRouteName` / `JTSPersonEventName` string-union types |
 | `generated/types/web-api-consts.ts` | generated — `export const HonoWebApiConsts = { PERSON, DELETE } as const` |
-
-*(The static shell that used to be `layout.ts` is now `index.html`; `layout.ts` was deleted.)*
 
 ---
 
@@ -272,7 +265,7 @@ component.**
 
 ---
 
-## Java → TS generation (Java is the source of truth) — unchanged
+## Java → TS generation (Java is the source of truth)
 
 Two `process-classes`-phase Maven plugins keep the TS side in sync; both outputs are git-ignored and
 rebuilt on every `mvn package` (`mvn compile` stops one phase too early).
@@ -288,13 +281,12 @@ rebuilt on every `mvn package` (`mvn compile` stops one phase too early).
 So: add a route → add the `JTSPersonRouteName` enum value, add its `case` in `PersonUIResource`, add
 the `personRoutes` entry in `routes.ts` (the `satisfies` makes a missing entry a TS error).
 
-The Java view-model records are still the single source of truth for the VM shapes — they are now
-serialized by jsonb straight onto the HTTP response instead of being handed to a JS engine, but the
-shapes the browser sees are the same.
+The Java view-model records are the single source of truth for the VM shapes; jsonb serializes them
+straight onto the HTTP response.
 
 ---
 
-## htmx / hyperscript choreography — unchanged
+## htmx / hyperscript choreography
 
 - `hx-get` / `hx-put` / `hx-delete` on elements → partial swaps.
 - Hyperscript `_="…"` attributes → client-side DOM events, no JS files.
@@ -327,7 +319,7 @@ its `#app` re-fetches `Page`.
    `src/main/resources/META-INF/resources/js/hono/hx-hono.js`.
 2. **`JsBundleWatcher`** (`@IfBuildProfile("dev")`, `@Scheduled(every = "1s")`) polls that file's
    `lastModified`; on change → `DevReloadSSE.broadcastReload()`. There is no server-side JS engine
-   to re-initialise anymore — a changed bundle just means "tell the page to reload".
+   to re-initialise — a changed bundle just means "tell the page to reload".
 3. **`DevReloadSSE`** (`@IfBuildProfile("dev")`, Vert.x `@Route("/dev-reload")`) pushes a `reload`
    event; `META-INF/resources/js/dev.js` listens with `new EventSource("/dev-reload")` and calls
    `location.reload()`.
@@ -337,7 +329,7 @@ a manual refresh may need a hard reload (Ctrl+Shift+R).
 
 ---
 
-## Persistence — unchanged
+## Persistence
 
 - **H2** in-memory (`jdbc:h2:mem:demo`), **Flyway** migration `V1__create_person_table.sql`
   (`quarkus.flyway.migrate-at-start=true`, `quarkus.flyway.locations=db/migration`).
@@ -352,10 +344,10 @@ a manual refresh may need a hard reload (Ctrl+Shift+R).
 
 | Decision | Rationale |
 |---|---|
-| hono `html` tagged templates (not JSX), run **in the browser** | Plain functions, no JSX toolchain; the same code that ran server-side in the GraalVM fork now runs client-side unchanged |
+| hono `html` tagged templates (not JSX), run **in the browser** | Plain functions, no JSX toolchain; nothing to execute inside the JVM |
 | `{ route, vm }` JSON envelope as the Java↔browser contract | Route name travels with the data — no extra header, no per-element attribute; the URL stays the only place routes are named |
 | One esbuild entry (`hx-hono.ts`) bundling the extension + `render` | No global, no separate "render bundle" + "extension" split |
 | Static `index.html` for first paint, no SSR | Nothing renders HTML on the server; `#app` bootstraps itself with `hx-trigger="load"` |
 | Java as the source of truth, TS generated | Route names, event names and VM shapes can't drift; a rename on the Java side is a TS compile error |
 | `.ts` co-located with the Java web layer | Templates are the web tier, not a separate project |
-| Plain JDK 21, no GraalVM / polyglot / native image | The rendering moved to the browser — the JVM only needs to serve JSON and static files |
+| Plain JDK 21 | The JVM only needs to serve JSON and static files |

@@ -11,8 +11,7 @@ currently this is WIP. More notes written down than real documentation
   - `PersonUIResource` creates these Java records and returns them wrapped in a
     `UiResponse(String route, Object vm)` envelope; JAX-RS + jsonb serialize that to
     `application/json`. The browser `JSON.parse`s the envelope and runs the matching hono template on
-    `vm` (see "Browser bundle" below). The rendering used to happen server-side inside a GraalVM
-    `Context`; only the transport changed — the VM shapes the templates consume are identical.
+    `vm` (see "Browser bundle" below).
 - The `cz.habarta.typescript-generator` Maven plugin (bound to the `process-classes` phase in `pom.xml`)
   scans for classes matching `dev.svenehrke.demo.inbound.**.*Model` and `dev.svenehrke.demo.inbound.**.*VM`
   and generates matching TypeScript interfaces into\
@@ -88,8 +87,7 @@ currently this is WIP. More notes written down than real documentation
 - The `.ts` components render HTML with hono's `html` tagged-template function
   (`import {html} from "hono/html"`), not with JSX. Each component is a plain function
   `(vm: SomeModel): HtmlResult => html`...`` where `HtmlResult = ReturnType<typeof html>`
-  (see `route-types.ts`). These files used to be `.tsx` (JSX) — since the conversion they contain
-  no JSX and are plain `.ts`; `tsconfig.json` no longer sets `jsx` / `jsxImportSource`.
+  (see `route-types.ts`). `tsconfig.json` sets no `jsx` / `jsxImportSource` options.
 - Rendering runs **in the browser**. `PersonUIResource` returns `{ route, vm }` as JSON; a small
   htmx 4 extension (`hono`, in `hx-hono.ts`) intercepts each `/uiroute/*` response and swaps the
   produced HTML in.
@@ -117,8 +115,8 @@ htmx.registerExtension("hono", {
   },
 });
 ````
-- `render.ts` no longer talks to any JS engine. It takes the already-parsed `vm` object and returns
-  a `string`; it doesn't dispatch itself — it looks `route` up in `routes.ts`'s `personRoutes` map:
+- `render.ts` takes the already-parsed `vm` object and returns a `string`; it doesn't dispatch
+  itself — it looks `route` up in `routes.ts`'s `personRoutes` map:
 ````ts
 import {html} from 'hono/html';
 import {personRoutes} from "./routes";
@@ -185,21 +183,13 @@ Notes:
 - Wiring `build:prod` into `mvn package` (via `frontend-maven-plugin` or `exec-maven-plugin`) is a
   possible follow-up — deliberately not done, to keep the frontend build a plain `npm` concern.
 
-#### `.tsx` -> `.ts` (done)
-
-The web layer used JSX until the `hono/html` conversion; afterwards no file under
-`src/main/java/dev/svenehrke/demo/inbound/web/` contained JSX, so all of them were renamed `.tsx` ->
-`.ts`. Changed at the same time: `package.json` `build` script (`render.ts`), `watch.ts` (now
-filters `.endsWith(".ts")`, so it also rebuilds on plain `.ts` edits like `route-types.ts`, which it
-ignored before), and `tsconfig.json` (dropped the now-dead `jsx` / `jsxImportSource` options).
-
 ### Live reload for the browser
 During development the browser should automatically refresh when one of the `.ts` files is changed.
 
 This is achieved by using an SSE connection (see `DevReloadSSE.java`, `inbound/web/infra/`) which is
 triggered by `JsBundleWatcher` whenever the emitted `hx-hono.js` bundle changes (it polls
 `src/main/resources/META-INF/resources/js/hono/hx-hono.js`'s `lastModified` once a second). There is
-no server-side JS engine to re-initialise anymore — a changed bundle just broadcasts a reload.
+no server-side JS engine to re-initialise — a changed bundle just broadcasts a reload.
 
 `index.html` loads `dev.js`, which listens to those SSE events:
 ````js
@@ -220,13 +210,13 @@ manual refresh may need a hard reload (Ctrl+Shift+R).
   the repo root) containing a Playwright test suite (`playwright/tests/main.spec.ts`).
 - Run it with `npm test` from inside `playwright/` (or `npx playwright test`).
 - `playwright.config.ts`'s `webServer` builds the browser bundle (`npm run build`), packages the app
-  on the default JDK (plain `mvn package -q -DskipTests` — no GraalVM), and starts a fresh instance on
-  port 8080 before every run (`java -jar target/quarkus-app/quarkus-run.jar`) — the in-memory H2
-  database is always re-seeded from scratch (`DBInitializer`, `Faker` with seed `0`), so the tests can
-  rely on deterministic data (e.g. the first seeded person is always "Jackie Rau").
+  (plain `mvn package -q -DskipTests`), and starts a fresh instance on port 8080 before every run
+  (`java -jar target/quarkus-app/quarkus-run.jar`) — the in-memory H2 database is always re-seeded
+  from scratch (`DBInitializer`, `Faker` with seed `0`), so the tests can rely on deterministic data
+  (e.g. the first seeded person is always "Jackie Rau").
 - The tests load the static shell at `/` (a `gotoApp(page)` helper waits for the load-triggered
   `#result-table table` render) and then exercise the actual app routes: `/uiroute/{name}` component
-  URLs (`/uiroute/Page`, `/uiroute/PersonDetails?id=..`, ...) — which now return the `{ route, vm }`
+  URLs (`/uiroute/Page`, `/uiroute/PersonDetails?id=..`, ...) — which return the `{ route, vm }`
   JSON envelope, rendered client-side — plus the separate `PUT /person/{id}` and `DELETE /delete`
   mutation endpoints (`DELETE` redirects to `/`).
 

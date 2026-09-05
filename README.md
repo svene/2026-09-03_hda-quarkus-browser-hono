@@ -4,12 +4,9 @@ A Hypermedia-Driven Application (HDA) demo: Quarkus + htmx 4, with the **hono/ht
 in the browser**. `/uiroute/*` endpoints are a plain JSON API returning a `{ route, vm }` envelope; a
 small htmx 4 extension (`hono`, bundled by esbuild into `hx-hono.js`) intercepts each response and
 runs the matching template client-side to produce the fragment htmx swaps in. First paint is a static
-`index.html` shell that bootstraps itself with `hx-trigger="load"`. Plain JDK 21 — no GraalVM, no
-polyglot, no native image.
+`index.html` shell that bootstraps itself with `hx-trigger="load"`, on plain JDK 21.
 
-This is the browser-rendering fork of `2026-03-15_hda-quarkus-graalvm-jsx-demo`, which runs the same
-templates server-side inside a GraalVM `Context` pool. See `architecture.md` and `development.md` for
-details.
+See `architecture.md` and `development.md` for details.
 
 This project uses Quarkus, the Supersonic Subatomic Java Framework.
 
