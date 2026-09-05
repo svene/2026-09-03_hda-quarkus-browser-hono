@@ -53,7 +53,7 @@ project-root/
 │   └── META-INF/resources/
 │       ├── index.html          # the static shell served at /
 │       ├── js/hono/hx-hono.js  # esbuild output (git-ignored, served under /js/hono/)
-│       └── …                    # bulma.min.css, htmx 4, hyperscript 0.9.93, alpine 3.16.3, main.js, dev.js
+│       └── …                    # css/bulma/1.0.4/bulma.min.css, htmx 4, hyperscript 0.9.93, alpine 3.16.3, main.js, dev.js
 └── src/main/docker/            # Quarkus-generated Dockerfile.{jvm,native,native-micro,legacy-jar}
 ```
 
