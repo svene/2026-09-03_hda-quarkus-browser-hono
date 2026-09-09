@@ -1,7 +1,7 @@
 # Variant note
 
 This repo is the **browser-rendering** fork of
-[`2026-03-15_hda-quarkus-graalvm-jsx-demo`](../2026-03-15_hda-quarkus-graalvm-jsx-demo).
+[`2026-03-15_hda-quarkus-graalvm-hono-demo`](../2026-03-15_hda-quarkus-graalvm-hono-demo).
 
 Same app, same hono/html templates, same htmx/hyperscript choreography, same Java→TS codegen, same
 persistence. The only difference is *where the templates run*:
