@@ -1,8 +1,8 @@
-# Architecture: Quarkus + browser-side hono/html HDA demo
+# Architecture: Quarkus + browser-side hono/html Hypermedia demo
 
 ## Overview
 
-A **Hypermedia-Driven Application (HDA)**: the browser swaps in HTML fragments with htmx — no SPA,
+A **Hypermedia-Driven Application**: the browser swaps in HTML fragments with htmx — no SPA,
 no virtual DOM. The twist in this variant: the HTML fragments are **rendered in the browser**, not
 on the server.
 

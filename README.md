@@ -1,6 +1,6 @@
-# hda-quarkus-browser-hono
+# hypermedia-quarkus-browser-hono
 
-A Hypermedia-Driven Application (HDA) demo: Quarkus + htmx 4, with the **hono/html templates rendered
+A Hypermedia-Driven Application demo: Quarkus + htmx 4, with the **hono/html templates rendered
 in the browser**. `/uiroute/*` endpoints are a plain JSON API returning a `{ route, vm }` envelope; a
 small htmx 4 extension (`hono`, bundled by esbuild into `hx-hono.js`) intercepts each response and
 runs the matching template client-side to produce the fragment htmx swaps in. First paint is a static
